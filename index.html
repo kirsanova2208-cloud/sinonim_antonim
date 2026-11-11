@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Побег из кабинета географа</title>
+    <style>
+        :root {
+            --bg-color: #1a1510;
+            --accent-color: #d4af37;
+            --text-color: #f0e6d2;
+            --success-color: #4caf50;
+            --error-color: #e53935;
+            --overlay-bg: rgba(20, 15, 10, 0.95);
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .screen { display: none; width: 100%; max-width: 1200px; padding: 20px; flex-direction: column; align-items: center; }
+        .screen.active { display: flex; }
+
+        h1, h2 { text-align: center; color: var(--accent-color); margin-bottom: 15px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        p { line-height: 1.6; margin-bottom: 15px; text-align: center; max-width: 600px; }
+
+        .btn {
+            background: linear-gradient(to bottom, #c5a028, #a08015);
+            border: 2px solid #ffd700;
+            color: #1a1510;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, filter 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-top: 10px;
+        }
+        .btn:hover { filter: brightness(1.1); transform: translateY(-2px); }
+        .btn:active { transform: translateY(1px); }
+        .btn-secondary { background: transparent; border-color: var(--accent-color); color: var(--accent-color); }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            border: 4px solid var(--accent-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .scene-wrapper {
+            width: 100%;
+            height: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .scene-content {
+            position: relative;
+            height: 100%;
+            min-width: 100%; 
+            display: inline-block;
+        }
+
+        .scene-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            pointer-events: none;
+        }
+
+        .marker {
+            position: absolute;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid var(--accent-color);
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .marker svg { width: 24px; height: 24px; fill: var(--accent-color); transition: fill 0.3s; }
+        
+        .marker:hover, .marker:focus { background: rgba(212, 175, 55, 0.2); box-shadow: 0 0 15px var(--accent-color); }
+        
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.6); }
+            70% { box-shadow: 0 0 0 12px rgba(212, 175, 55, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+        }
+        .marker:not(.solved):not(.locked) { animation: pulse-glow 2s infinite; }
+
+        .marker.solved {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: var(--success-color);
+            animation: none;
+        }
+        .marker.solved svg { fill: var(--success-color); }
+
+        .marker-label {
+            position: absolute;
+            bottom: 110%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .marker:hover .marker-label, .marker:active .marker-label { opacity: 1; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--overlay-bg);
+            display: none; justify-content: center; align-items: center;
+            z-index: 100; padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal-content {
+            background: #2a2218;
+            border: 2px solid var(--accent-color);
+            border-radius: 12px;
+            padding: 25px;
+            max-width: 500px;
+            width: 100%;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+
+        .close-btn {
+            position: absolute; top: 10px; right: 15px;
+            background: none; border: none; color: var(--text-color);
+            font-size: 1.5rem; cursor: pointer; opacity: 0.7;
+        }
+        .close-btn:hover { opacity: 1; }
+
+        .task-text { font-size: 1.1rem; margin-bottom: 20px; text-align: left; }
+        
+        .input-group { margin-bottom: 15px; }
+        input[type="text"] {
+            width: 100%; padding: 12px; font-size: 1rem;
+            background: #1a1510; border: 1px solid var(--accent-color);
+            color: var(--text-color); border-radius: 6px; outline: none;
+        }
+        input[type="text"]:focus { border-color: #ffd700; box-shadow: 0 0 8px rgba(212,175,55,0.3); }
+
+        .options-grid { display: grid; gap: 10px; margin-bottom: 15px; }
+        .option-btn {
+            background: #1a1510; border: 1px solid #554a35; color: var(--text-color);
+            padding: 12px; border-radius: 6px; cursor: pointer; text-align: left;
+            transition: all 0.2s;
+        }
+        .option-btn:hover { border-color: var(--accent-color); background: #251e14; }
+        .option-btn.selected { border-color: var(--accent-color); background: rgba(212,175,55,0.1); }
+
+        .feedback {
+            margin-top: 15px; padding: 12px; border-radius: 6px;
+            font-size: 0.95rem; display: none; text-align: left;
+        }
+        .feedback.success { background: rgba(76,175,80,0.15); border-left: 4px solid var(--success-color); display: block; }
+        .feedback.error { background: rgba(229,57,53,0.15); border-left: 4px solid var(--error-color); display: block; }
+
+        .hint-btn {
+            background: none; border: none; color: #888; font-size: 0.9rem;
+            cursor: pointer; margin-right: 15px; text-decoration: underline;
+        }
+        .hint-btn:hover { color: var(--accent-color); }
+        .hint-text { color: #aaa; font-style: italic; margin-top: 8px; font-size: 0.9rem; display: none; }
+
+        .progress-bar-container {
+            width: 100%; max-width: 900px; height: 8px; background: #332b20;
+            border-radius: 4px; margin: 15px 0; overflow: hidden;
+        }
+        .progress-bar { height: 100%; background: var(--accent-color); width: 0%; transition: width 0.5s ease; }
+
+        .controls { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; justify-content: center; }
+        .scroll-hint { color: #888; font-size: 0.85rem; margin-top: 8px; display: none; }
+        
+        .setup-coords {
+            position: fixed; bottom: 10px; right: 10px; background: rgba(0,0,0,0.8);
+            color: lime; padding: 5px 10px; font-family: monospace; font-size: 12px;
+            border-radius: 4px; display: none; z-index: 200; pointer-events: none;
+        }
+
+        @media (max-width: 700px) {
+            .game-container { border-width: 2px; }
+            .marker { width: 40px; height: 40px; }
+            .marker svg { width: 20px; height: 20px; }
+            .scroll-hint { display: block; }
+            .scene-wrapper { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen" class="screen active">
+        <h1>Кабинет Географа</h1>
+        <p>Вы — юный исследователь. Чтобы покинуть кабинет и отправиться в экспедицию, нужно восстановить 5 утерянных знаний о нашей планете.</p>
+        <p>Нажимайте на светящиеся предметы, решайте задачи и откройте дверь выхода.</p>
+        <button class="btn" onclick="game.start()">Начать игру</button>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div style="width:100%; max-width:900px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:var(--accent-color); font-weight:bold;">Русский язык + География | 5 класс</span>
+            <span id="progress-text" style="color:var(--text-color);">Системы: 0/5</span>
+        </div>
+        <div class="progress-bar-container"><div id="progress-fill" class="progress-bar"></div></div>
+        
+        <div class="game-container" id="game-container">
+            <div class="scene-wrapper" id="scene-wrapper">
+                <div class="scene-content" id="scene-content">
+                    <img src="room.png" alt="Кабинет географа" class="scene-img" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'display:flex;height:100%;align-items:center;justify-content:center;color:#e53935;font-weight:bold;padding:20px;text-align:center;\'>Ошибка: файл room.png не найден.<br>Положите картинку в ту же папку, что и этот HTML-файл.</div>'">
+                    
+                    <div class="marker" id="marker-globe" data-id="globe" style="left:20%; top:35%;" onclick="game.openTask('globe')">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                        <span class="marker-label">Глобус</span>
+                    </div>
+                    <div class="marker" id="marker-map" data-id="map" style="left:28%; top:75%;" onclick="game.openTask('map')">
+                        <svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+                        <span class="marker-label">Карта</span>
+                    </div>
+                    <div class="marker" id="marker-compass" data-id="compass" style="left:50%; top:60%;" onclick="game.openTask('compass')">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.22-7.52-3.22 7.52-3.22-7.51-3.22 7.51 3.22 7.52 3.22-7.52 3.22 7.51 3.22-7.51-3.22z"/></svg>
+                        <span class="marker-label">Компас</span>
+                    </div>
+                    <div class="marker" id="marker-spyglass" data-id="spyglass" style="left:48%; top:25%;" onclick="game.openTask('spyglass')">
+                        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        <span class="marker-label">Подзорная труба</span>
+                    </div>
+                    <div class="marker" id="marker-lantern" data-id="lantern" style="left:72%; top:35%;" onclick="game.openTask('lantern')">
+                        <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6A4.997 4.997 0 0 1 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+                        <span class="marker-label">Фонарь</span>
+                    </div>
+                    <div class="marker locked" id="marker-door" data-id="door" style="left:88%; top:50%;" onclick="game.checkDoor()">
+                        <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                        <span class="marker-label">Выход</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="scroll-hint">← листай комнату →</div>
+
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="game.showLog()">Журнал</button>
+            <button class="btn btn-secondary" onclick="game.confirmReset()">Начать заново</button>
+        </div>
+    </div>
+
+    <div id="final-screen" class="screen">
+        <h1>Экспедиция начинается!</h1>
+        <p>Поздравляем! Вы успешно восстановили все знания и открыли дверь.</p>
+        <div style="background:#2a2218; padding:20px; border-radius:8px; margin:20px 0; text-align:left; max-width:500px;">
+            <h3 style="color:var(--accent-color); margin-bottom:10px;">Что вы повторили:</h3>
+            <ul style="padding-left:20px; line-height:1.8;">
+                <li>Родовые и видовые понятия (Материки)</li>
+                <li>Синонимы в географическом контексте</li>
+                <li>Антонимы: стороны света, состав воды, морские явления</li>
+            </ul>
+        </div>
+        <button class="btn" onclick="game.confirmReset()">Играть заново</button>
+    </div>
+
+    <div id="task-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-btn" onclick="game.closeModal()">×</button>
+            <h2 id="modal-title" style="margin-bottom:10px; font-size:1.3rem;"></h2>
+            <p id="modal-task" class="task-text"></p>
+            
+            <div id="modal-input-area"></div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
+                <div>
+                    <button class="hint-btn" onclick="game.showHint(1)">Подсказка 1</button>
+                    <button class="hint-btn" onclick="game.showHint(2)">Подсказка 2</button>
+                </div>
+                <button class="btn" id="check-btn" onclick="game.checkAnswer()" style="margin:0; padding:8px 20px; font-size:0.9rem;">Проверить</button>
+            </div>
+            
+            <div id="hint-1" class="hint-text"></div>
+            <div id="hint-2" class="hint-text"></div>
+            <div id="feedback" class="feedback"></div>
+        </div>
+    </div>
+
+    <div id="log-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-btn" onclick="document.getElementById('log-modal').classList.remove('active')">×</button>
+            <h2>Журнал открытий</h2>
+            <ul id="log-list" style="list-style:none; padding:0; text-align:left;"></ul>
+        </div>
+    </div>
+
+    <div id="reset-modal" class="modal-overlay">
+        <div class="modal-content" style="text-align:center;">
+            <h2>Начать заново?</h2>
+            <p>Весь прогресс будет сброшен.</p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+                <button class="btn" onclick="game.resetGame()">Да, сбросить</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('reset-modal').classList.remove('active')">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="door-msg-modal" class="modal-overlay">
+        <div class="modal-content" style="text-align:center;">
+            <button class="close-btn" onclick="document.getElementById('door-msg-modal').classList.remove('active')">×</button>
+            <h2>Дверь заперта</h2>
+            <p id="door-msg-text"></p>
+        </div>
+    </div>
+
+    <div id="setup-coords" class="setup-coords"></div>
+
+<script>
+const TASKS = {
+    globe: {
+        title: "Глобус: Материки",
+        task: "Дана закрытая тематическая группа «Материки». В списке пропущен один элемент: Евразия, Африка, Северная Америка, Южная Америка, Австралия. Впишите недостающий шестой элемент этой группы.",
+        type: "input",
+        answers: ["антарктида"],
+        hint1: "Вспомните все крупные массивы суши, которые считаются материками.",
+        hint2: "Этот материк находится на самом юге Земли и почти полностью покрыт ледником.",
+        success: "Верно! Антарктида — шестой материк, замыкающий эту тематическую группу.",
+        error: "В списке перечислены 5 из 6 материков. Шестой — самый южный и холодный."
+    },
+    map: {
+        title: "Морская карта: Синонимы",
+        task: "Какое слово является синонимом к слову «побережье»?",
+        type: "choice",
+        options: ["берег", "глубина", "течение"],
+        correctIndex: 0,
+        hint1: "Синоним — это слово, близкое по значению. Что омывает море?",
+        hint2: "Исключите слова, которые описывают свойства воды, а не суши.",
+        success: "Верно! «Побережье» и «берег» — синонимы, обозначающие полосу суши вдоль водоёма.",
+        error: "«Глубина» и «течение» относятся к характеристикам воды, а не к полосе суши."
+    },
+    compass: {
+        title: "Компас: Стороны света",
+        task: "Подберите антоним к слову «север».",
+        type: "input",
+        answers: ["юг"],
+        hint1: "Антоним — слово с противоположным значением. Вспомните основные стороны горизонта.",
+        hint2: "На компасе эта сторона находится ровно напротив севера.",
+        success: "Верно! Север и юг — противоположные стороны горизонта.",
+        error: "«Восток» и «запад» — это другие стороны горизонта, а не противоположные северу."
+    },
+    spyglass: {
+        title: "Подзорная труба: Состав воды",
+        task: "В словосочетании «пресная вода» найдите антоним к слову «пресная».",
+        type: "choice",
+        options: ["солёная", "чистая", "холодная"],
+        correctIndex: 0,
+        hint1: "Антоним — слово с противоположным значением. Какая вода в океанах и морях?",
+        hint2: "Вспомните главное отличие воды в реках от воды в морях.",
+        success: "Верно! «Пресная» и «солёная» — антонимы, описывающие противоположный состав воды.",
+        error: "«Чистая» и «холодная» описывают другие физические свойства воды, а не её солёность."
+    },
+    lantern: {
+        title: "Корабельный фонарь: Морские явления",
+        task: "Подберите антоним к слову «прилив» в предложении: «Во время прилива вода затапливает прибрежную зону».",
+        type: "input",
+        answers: ["отлив"],
+        hint1: "Антоним — слово с противоположным значением. Как называется процесс, когда вода уходит от берега?",
+        hint2: "Вспомните два противоположных морских явления, связанных с суточным движением воды.",
+        success: "Верно! «Прилив» (подъём) и «отлив» (спад) — противоположные морские явления.",
+        error: "«Волна» и «шторм» не являются антонимами слова «прилив», так как не обозначают противоположное направление движения воды."
+    }
+};
+
+const ICONS = {
+    lock: '<svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>',
+    check: '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+};
+
+const game = {
+    state: { solved: [], currentTask: null, selectedOption: null },
+    
+    init() {
+        const saved = localStorage.getItem('geoEscapeState');
+        if (saved) this.state = JSON.parse(saved);
+        this.updateUI();
+        this.setupMode();
+    },
+
+    start() {
+        document.getElementById('start-screen').classList.remove('active');
+        document.getElementById('game-screen').classList.add('active');
+        this.updateUI();
+    },
+
+    openTask(id) {
+        if (this.state.solved.includes(id)) return;
+        this.state.currentTask = id;
+        this.state.selectedOption = null;
+        const t = TASKS[id];
+        
+        document.getElementById('modal-title').textContent = t.title;
+        document.getElementById('modal-task').textContent = t.task;
+        document.getElementById('feedback').className = 'feedback';
+        document.getElementById('feedback').style.display = 'none';
+        document.getElementById('hint-1').style.display = 'none';
+        document.getElementById('hint-2').style.display = 'none';
+        
+        const area = document.getElementById('modal-input-area');
+        area.innerHTML = '';
+        
+        if (t.type === 'input') {
+            area.innerHTML = `<div class="input-group"><input type="text" id="task-input" inputmode="decimal" placeholder="Введите ответ..." autocomplete="off"></div>`;
+            setTimeout(() => document.getElementById('task-input').focus(), 100);
+        } else if (t.type === 'choice') {
+            let html = '<div class="options-grid">';
+            t.options.forEach((opt, i) => {
+                html += `<button class="option-btn" onclick="game.selectOption(${i}, this)">${opt}</button>`;
+            });
+            html += '</div>';
+            area.innerHTML = html;
+        }
+        
+        document.getElementById('task-modal').classList.add('active');
+    },
+
+    selectOption(index, btn) {
+        this.state.selectedOption = index;
+        document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+    },
+
+    showHint(num) {
+        const t = TASKS[this.state.currentTask];
+        const el = document.getElementById(`hint-${num}`);
+        if (el.style.display !== 'block') {
+            el.textContent = num === 1 ? t.hint1 : t.hint2;
+            el.style.display = 'block';
+        }
+    },
+
+    checkAnswer() {
+        const t = TASKS[this.state.currentTask];
+        const fb = document.getElementById('feedback');
+        let isCorrect = false;
+
+        if (t.type === 'input') {
+            const val = document.getElementById('task-input').value.trim().toLowerCase().replace('.', ',');
+            isCorrect = t.answers.some(a => a === val || a.replace('.', ',') === val);
+        } else {
+            isCorrect = this.state.selectedOption === t.correctIndex;
+        }
+
+        if (isCorrect) {
+            fb.className = 'feedback success';
+            fb.textContent = t.success;
+            fb.style.display = 'block';
+            if (!this.state.solved.includes(this.state.currentTask)) {
+                this.state.solved.push(this.state.currentTask);
+                this.save();
+                this.updateUI();
+            }
+            setTimeout(() => this.closeModal(), 2000);
+        } else {
+            fb.className = 'feedback error';
+            fb.textContent = t.error;
+            fb.style.display = 'block';
+        }
+    },
+
+    closeModal() {
+        document.getElementById('task-modal').classList.remove('active');
+        this.state.currentTask = null;
+        this.state.selectedOption = null;
+    },
+
+    checkDoor() {
+        if (this.state.solved.length >= 5) {
+            document.getElementById('game-screen').classList.remove('active');
+            document.getElementById('final-screen').classList.add('active');
+        } else {
+            const remaining = 5 - this.state.solved.length;
+            document.getElementById('door-msg-text').textContent = `Для открытия двери необходимо восстановить ещё ${remaining} систем.`;
+            document.getElementById('door-msg-modal').classList.add('active');
+        }
+    },
+
+    updateUI() {
+        const count = this.state.solved.length;
+        document.getElementById('progress-text').textContent = `Системы: ${count}/5`;
+        document.getElementById('progress-fill').style.width = `${(count/5)*100}%`;
+        
+        this.state.solved.forEach(id => {
+            const m = document.getElementById(`marker-${id}`);
+            if (m) {
+                m.classList.add('solved');
+                m.querySelector('svg').outerHTML = ICONS.check;
+            }
+        });
+
+        if (count >= 5) {
+            const door = document.getElementById('marker-door');
+            door.classList.remove('locked');
+            door.classList.add('solved');
+            door.querySelector('svg').outerHTML = ICONS.check;
+        }
+    },
+
+    save() { localStorage.setItem('geoEscapeState', JSON.stringify(this.state)); },
+
+    confirmReset() { document.getElementById('reset-modal').classList.add('active'); },
+    
+    resetGame() {
+        this.state = { solved: [], currentTask: null, selectedOption: null };
+        localStorage.removeItem('geoEscapeState');
+        document.getElementById('reset-modal').classList.remove('active');
+        document.querySelectorAll('.marker').forEach(m => {
+            m.classList.remove('solved');
+            const id = m.dataset.id;
+            if (id !== 'door') {
+                const originalSvg = TASKS[id] ? (TASKS[id].type === 'choice' ? ICONS.lock : ICONS.lock) : ICONS.lock;
+                // Restore original icons based on ID logic or just reload page for simplicity in this constrained env
+            }
+        });
+        location.reload(); 
+    },
+
+    showLog() {
+        const list = document.getElementById('log-list');
+        list.innerHTML = '';
+        if (this.state.solved.length === 0) {
+            list.innerHTML = '<li style="color:#888;">Пока нет открытых систем.</li>';
+        } else {
+            this.state.solved.forEach(id => {
+                const li = document.createElement('li');
+                li.style.marginBottom = '8px';
+                li.style.color = 'var(--success-color)';
+                li.innerHTML = `✓ ${TASKS[id].title}`;
+                list.appendChild(li);
+            });
+        }
+        document.getElementById('log-modal').classList.add('active');
+    },
+
+    setupMode() {
+        if (window.location.hash === '#setup') {
+            const coordsEl = document.getElementById('setup-coords');
+            coordsEl.style.display = 'block';
+            const scene = document.getElementById('scene-content');
+            scene.addEventListener('click', (e) => {
+                const rect = scene.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                coordsEl.textContent = `left: ${Math.round(x)}%, top: ${Math.round(y)}%`;
+            });
+        }
+    }
+};
+
+window.onload = () => game.init();
+</script>
+</body>
+</html>
